@@ -775,11 +775,7 @@ def get_route_metadata():
                 historic_speed,
                 historic_time
             FROM routes
-            WHERE id_parceiro = 2 
-            avg_speed IS NOT NULL
-            AND avg_time IS NOT NULL
-            AND historic_speed IS NOT NULL
-            AND historic_time IS NOT NULL
+            WHERE id_parceiro = 2
         """
         
         mycursor.execute(query)
