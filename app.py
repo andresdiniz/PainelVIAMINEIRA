@@ -265,15 +265,7 @@ def get_db_connection():
 
 def get_data(start_date=None, end_date=None, route_name=None):
     """
-    Busca dados históricos de velocidade do banco de dados para uma rota e período específicos.
-
-    Args:
-        start_date (str, optional): Data de início no formato YYYY-MM-DD. Defaults to None.
-        end_date (str, optional): Data de fim no formato YYYY-MM-DD. Defaults to None.
-        route_name (str, optional): Nome da rota. Defaults to None.
-
-    Returns:
-        tuple[pd.DataFrame, str | None]: DataFrame com os dados e mensagem de erro (se houver).
+    Busca dados históricos de velocidade com tratamento de palavras reservadas
     """
     mydb = None
     mycursor = None
@@ -281,51 +273,72 @@ def get_data(start_date=None, end_date=None, route_name=None):
         mydb = get_db_connection()
         mycursor = mydb.cursor()
 
+        # Query base com proteção contra palavras reservadas
         query = """
-            SELECT hr.route_id, r.name AS route_name, hr.data, hr.velocidade
-        FROM historic_routes hr
-        JOIN routes r ON hr.route_id = r.id
-        WHERE r.id_parceiro = 2 
+            SELECT 
+                hr.route_id, 
+                r.name AS route_name, 
+                hr.`data` AS data_coleta,
+                hr.velocidade
+            FROM historic_routes hr
+            INNER JOIN routes r 
+                ON hr.route_id = r.id 
+                AND r.id_parceiro = 2  -- Filtro fixo do parceiro
+            WHERE 1=1  -- Facilitador de condições
         """
+
         conditions = []
         params = []
 
+        # Filtros dinâmicos
         if route_name:
             conditions.append("r.name = %s")
             params.append(route_name)
+            
         if start_date:
-            conditions.append("hr.data >= %s")
+            conditions.append("hr.`data` >= %s")
             params.append(start_date)
+            
         if end_date:
-             # Para incluir o último dia completo, filtrar por < (data final + 1 dia)
-            end_datetime = pd.to_datetime(end_date) + pd.Timedelta(days=1)
-            end_date_plus_one_day_str = end_datetime.strftime('%Y-%m-%d')
+            # Ajuste para incluir todo o último dia
+            end_date_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d") + datetime.timedelta(days=1)
+            end_date_plus_one = end_date_dt.strftime("%Y-%m-%d")
+            conditions.append("hr.`data` < %s")
+            params.append(end_date_plus_one)
 
-            conditions.append("hr.data < %s") # Usar o operador MENOR QUE (<)
-            params.append(end_date_plus_one_day_str) # Usar a data final + 1 dia
-
+        # Montagem final da query
         if conditions:
-            query += " WHERE " + " AND ".join(conditions)
+            query += " AND " + " AND ".join(conditions)
+            
+        query += " ORDER BY hr.`data` ASC"  -- Ordenação segura
 
-        query += " ORDER BY hr.data ASC"
-
+        # Execução
         mycursor.execute(query, params)
         results = mycursor.fetchall()
-        col_names = [desc[0] for desc in mycursor.description]
+        
+        # Converter para DataFrame
+        col_names = [i[0] for i in mycursor.description]
         df = pd.DataFrame(results, columns=col_names)
 
-        # Convertendo 'data' para datetime e 'velocidade' para numérico
-        df['data'] = pd.to_datetime(df['data']).dt.tz_localize(None) # Remover timezone se presente
-        df['velocidade'] = pd.to_numeric(df['velocidade'], errors='coerce')
+        # Converter tipos de dados
+        if not df.empty:
+            df['data_coleta'] = pd.to_datetime(df['data_coleta']).dt.tz_localize(None)
+            df['velocidade'] = pd.to_numeric(df['velocidade'], errors='coerce')
 
         return df, None
+
+    except mysql.connector.Error as err:
+        logging.error(f"Erro MySQL [{err.errno}]: {err.msg}")
+        return pd.DataFrame(), str(err)
     except Exception as e:
-        logging.exception(f"Erro ao obter dados para rota {route_name}:") # Log detalhado
-        return pd.DataFrame(), str(e) # Retorna DataFrame vazio e erro
+        logging.error(f"Erro geral: {str(e)}", exc_info=True)
+        return pd.DataFrame(), str(e)
     finally:
-        if mycursor:
-            mycursor.close()
-        # Não feche a conexão 'mydb' aqui, pois ela é gerenciada por st.cache_resource
+        try:
+            if mycursor: mycursor.close()
+            if mydb: mydb.close()
+        except Exception as e:
+            logging.error(f"Erro ao fechar conexão: {str(e)}")
 
 def get_all_route_names():
     """
