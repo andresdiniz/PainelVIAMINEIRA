@@ -278,7 +278,7 @@ def get_data(start_date=None, end_date=None, route_name=None):
             SELECT 
                 hr.route_id, 
                 r.name AS route_name, 
-                hr.`data` AS data_coleta,
+                hr.`data` AS data,
                 hr.velocidade
             FROM historic_routes hr
             INNER JOIN routes r 
@@ -322,7 +322,7 @@ def get_data(start_date=None, end_date=None, route_name=None):
 
         # Converter tipos de dados
         if not df.empty:
-            df['data_coleta'] = pd.to_datetime(df['data_coleta']).dt.tz_localize(None)
+            df['data'] = pd.to_datetime(df['data']).dt.tz_localize(None)
             df['velocidade'] = pd.to_numeric(df['velocidade'], errors='coerce')
 
         return df, None
