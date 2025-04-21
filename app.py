@@ -283,7 +283,7 @@ def get_data(start_date=None, end_date=None, route_name=None):
             FROM historic_routes hr
             INNER JOIN routes r 
                 ON hr.route_id = r.id 
-                AND r.id_parceiro = 2  -- Filtro fixo do parceiro
+                AND r.id_parceiro = 2 
             WHERE 1=1  -- Facilitador de condições
         """
 
@@ -310,7 +310,7 @@ def get_data(start_date=None, end_date=None, route_name=None):
         if conditions:
             query += " AND " + " AND ".join(conditions)
             
-        query += " ORDER BY hr.`data` ASC"  -- Ordenação segura
+        query += " ORDER BY hr.`data` ASC" # Ordenar por data crescente
 
         # Execução
         mycursor.execute(query, params)
